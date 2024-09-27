@@ -20,20 +20,101 @@ library(lattice)
 
 rm(list=ls())
 figures_folder = "figuras"
-results_tbl <- read.csv("./DatosUnificados/Dresults_without_outliers_slope_and_intercepto_lin_log.csv", header = TRUE, sep = ',', stringsAsFactors = TRUE)
+results_tbl <- read.csv("./DatosUnificados/Dresults_without_outliers_slope_and_intercepto.csv", header = TRUE, sep = ',', stringsAsFactors = TRUE)
 cbPalette <- c("#000000","#E69F00","#009E73", "#999999", "#D55E00", "#0072B2", "#CC79A7", "#F0E442")
 
+idx = results_tbl$subject == "T005"
+results_tbl = results_tbl[!idx,]
+idx = results_tbl$subject == "T006"
+results_tbl = results_tbl[!idx,]
+
+idx = results_tbl$subject == "S010"
+results_tbl = results_tbl[!idx,]
+idx = results_tbl$subject == "S012"
+results_tbl = results_tbl[!idx,]
+idx = results_tbl$subject == "S018"
+results_tbl = results_tbl[!idx,]
+idx = results_tbl$subject == "S019"
+results_tbl = results_tbl[!idx,]
+
+
+results_tbl = results_tbl %>% filter(location == "sitting") %>%
+  ungroup()
+results_tbl = results_tbl %>% filter(location == "standing") %>%
+  ungroup()
 #LINEAL ----
 # PAD NORMAL
-m.Dist1 <-  lme(perc_dist ~ target_distance*condition, random = ~target_distance|subject,
-                method = "ML", control =list(msMaxIter = 1000, msMaxEval = 1000),
-                data = filter(results_tbl,type == "NORMAL"))
+a = qplot(target_distance, perc_dist, data=filter(results_tbl,type == "ROVED"),group = condition, color = condition) + facet_wrap(~subject, nrow=3) + geom_smooth(method='lm')+  geom_abline(intercept = 0, slope = 1, linetype=2)+  theme_pubr(base_size = 12, margin = TRUE)+
+  theme(legend.position = "top",
+        legend.title = element_blank())
+
+a
+
+# m.Dist1 <-  lme(perc_dist ~ target_distance*condition, random = ~target_distance|subject,
+#                 method = "ML", control =list(msMaxIter = 1000, msMaxEval = 1000),
+#                 data = filter(results_tbl, type == "NORMAL"))
+# 
+# anova(m.Dist1)
+
+
+m.Dist1 <-  lmer(perc_dist ~ target_distance*condition+(1+target_distance|subject)+(0+condition|subject),
+                 data = filter(results_tbl,type == "NORMAL"))
+extract_stats(ggcoefstats(m.Dist1))
+r.squaredGLMM(m.Dist1)
+anova(m.Dist1)
+
+
+tabla.pob = filter(results_tbl,type == "NORMAL") %>% group_by(target_distance,condition) %>%
+  summarise(Mperc_dist  = mean(perc_dist),
+            SDperc_dist = sd(perc_dist)/sqrt(n()))  %>%
+  ungroup()
+
+
+Final.Fixed<-effect(c("target_distance*condition"), m.Dist1,
+                    xlevels=list(target_distance=c(2,2.9,4.2,6)))
+
+# You have to convert the output to a dataframe
+Final.Fixed<-as.data.frame(Final.Fixed)
+
+Final.Fixed.Plot <-ggplot(data = Final.Fixed, aes(x = target_distance, y =fit, group=condition))+
+  geom_line(aes(color=condition), size=2)+
+  geom_ribbon(aes(ymin=fit-se, ymax=fit+se,fill=condition),alpha=.2)+
+  geom_point(data = tabla.pob, aes(x = target_distance, y =Mperc_dist,
+                                   group = condition,
+                                   color = condition),size = 5)+
+  scale_x_continuous(name="Distance source (cm)", limits = c(0.9,7)) +
+  scale_y_continuous(name="Perceived distance (cm)",   limits = c(0.9,7)) +
+  geom_abline(intercept = 0, slope = 1, linetype=3) +
+  scale_color_manual(values=cbPalette)+
+  scale_fill_manual(values=cbPalette)+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        legend.title=element_blank(),
+        legend.position = c(.2, .82))
+Final.Fixed.Plot
+f1 = Final.Fixed.Plot
+mi_nombre_de_archivo = paste(figures_folder, .Platform$file.sep, "New Figure standing2", ".png", sep = '')
+ggsave(mi_nombre_de_archivo, plot=Final.Fixed.Plot, width=10, height=10, units="cm", limitsize=FALSE, dpi=600)
+
+
+
+
+m.Dist1 <-  lmer(perc_dist ~ target_distance*condition*type+(1+target_distance|subject)+(0+condition|subject),
+                 data = results_tbl)
+extract_stats(ggcoefstats(m.Dist1))
+r.squaredGLMM(m.Dist1)
+
+anova(m.Dist1)
+anov1 = anova(m.Dist1)
+
 
 eq1 <- substitute("Ear level:"~~~italic(y) == a %.% italic(X)+italic((b)), 
                   list(a = round(m.Dist1$coefficients$fixed[[2]],digits = 2),
                        b = round(m.Dist1$coefficients$fixed[[1]], digits = 2)))
 eq2 <- substitute("Floor level:"~~~italic(y) == a %.% italic(X)+italic((b)), 
-                  list(a = round(m.Dist1$coefficients$fixed[[2]]+m.Dist1$coefficients$fixed[[4]], digits = 2),
+                  list(a = round(m.Dist1$coefficients$fixed[[2]]+m.Dist1$coefficients$fixed[[5]], digits = 2),
                        b = round(m.Dist1$coefficients$fixed[[1]]+m.Dist1$coefficients$fixed[[3]], digits = 2)))
 eq3 <- substitute("r.squared:"~~~italic(R)^italic(2) == italic(b), 
                   list(b = round(r.squaredGLMM(m.Dist1)[2], digits = 2)))
@@ -56,7 +137,7 @@ f1 <- ggplot(tabla.pob, aes(x=target_distance, y =Mperc_dist, group = condition,
               alpha = 0.5,
               size = 1.2,
               color = "#000000") +
-  geom_abline(slope =m.Dist1$coefficients$fixed[[2]]+m.Dist1$coefficients$fixed[[4]], 
+  geom_abline(slope =m.Dist1$coefficients$fixed[[2]]+m.Dist1$coefficients$fixed[[5]], 
               intercept =m.Dist1$coefficients$fixed[[1]]+m.Dist1$coefficients$fixed[[3]], 
               alpha = 0.5,
               size = 1.2,
@@ -64,8 +145,8 @@ f1 <- ggplot(tabla.pob, aes(x=target_distance, y =Mperc_dist, group = condition,
   geom_text(x = 1.1, y = 6.6, label = as.character(as.expression(eq1)), hjust = 0, nudge_x =  0, parse = TRUE, size = 3.5, color = "#000000")+
   geom_text(x = 1.1, y = 6.1, label = as.character(as.expression(eq2)), hjust = 0, nudge_x =  0,parse = TRUE, size = 3.5, color = "#E69F00")+
   #geom_text(x = 0.2, y = 6, label = as.character(as.expression(eq3)), hjust = 0, nudge_x =  0, parse = TRUE, size = 4, color = "#009E73")+
-  scale_x_continuous(name="Source distance (m)", limits = c(1,7)) +
-  scale_y_continuous(name="Perceived distance (m)",   limits = c(1,7)) +
+  scale_x_continuous(name="Source distance (m)", limits = c(0,7)) +
+  scale_y_continuous(name="Perceived distance (m)",   limits = c(0,7)) +
   ggtitle("Experiment 1")+
   theme_pubr(base_size = 12, margin = TRUE)+
   theme(legend.position = "top",
@@ -238,7 +319,7 @@ Figure1
 #                     ncol = 1, nrow = 2,labels = c("A", ""),
 #                     common.legend = TRUE, legend="top", align = "h")
 # Figure1
-mi_nombre_de_archivo = paste("figuras", .Platform$file.sep, "FIG1. Experimento1", ".png", sep = '')
+mi_nombre_de_archivo = paste("figuras", .Platform$file.sep, "FIG1. Experimento1 SENTADO SIN 5", ".png", sep = '')
 ggsave(mi_nombre_de_archivo, plot=Figure1, width=18, height=15, units="cm", limitsize=FALSE, dpi=600)
 
 
@@ -251,7 +332,7 @@ m.Dist1 <-  lme(perc_dist ~ target_distance*condition, random = ~target_distance
                 method = "ML", control =list(msMaxIter = 1000, msMaxEval = 1000),
                 data = filter(results_tbl,type == "ROVED"))
 
-
+anova(m.Dist1)
 eq1 <- substitute("Ear level:"~~~italic(y) == a %.% italic(X)+italic((b)), 
                   list(a = round(m.Dist1$coefficients$fixed[[2]],digits = 2),
                        b = round(m.Dist1$coefficients$fixed[[1]], digits = 2)))
@@ -414,7 +495,7 @@ Figure2 = ggarrange(f5,
                     common.legend = TRUE, legend="top", align = "hv")
 Figure2
 
-mi_nombre_de_archivo = paste("figuras", .Platform$file.sep, "FIG2. Experimento2", ".png", sep = '')
+mi_nombre_de_archivo = paste("figuras", .Platform$file.sep, "FIG2. Experimento2 SENTADO", ".png", sep = '')
 ggsave(mi_nombre_de_archivo, plot=Figure2, width=18, height=15, units="cm", limitsize=FALSE, dpi=600)
 
 
